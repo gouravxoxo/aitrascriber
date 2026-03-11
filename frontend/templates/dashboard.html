@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoiceIQ — Dashboard</title>
+<title>AI Transcriber — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -98,6 +98,24 @@
   .mode-toggle { display:flex; gap:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:3px; margin-bottom:18px; }
   .mode-btn { flex:1; padding:7px 10px; background:none; border:none; color:var(--muted); font-family:inherit; font-size:11px; cursor:pointer; border-radius:6px; transition:all 0.2s; }
   .mode-btn.active { background:var(--card2); color:var(--text); }
+  .source-panel { display:none; margin-bottom:18px; }
+  .source-panel.show { display:block; }
+  .url-box {
+    width:100%; min-height:110px; resize:vertical;
+    background:var(--card); border:1px solid var(--border); border-radius:8px;
+    padding:11px 12px; color:var(--text); font-family:inherit; font-size:12px; outline:none;
+    transition:border-color 0.2s;
+  }
+  .url-box:focus { border-color:var(--agent); }
+  .url-box::placeholder { color:var(--muted2); }
+  .url-single-input {
+    width:100%; background:var(--card); border:1px solid var(--border); border-radius:8px;
+    padding:11px 12px; color:var(--text); font-family:inherit; font-size:12px; outline:none;
+    transition:border-color 0.2s;
+  }
+  .url-single-input:focus { border-color:var(--agent); }
+  .url-single-input::placeholder { color:var(--muted2); }
+  .source-hint { font-size:10px; color:var(--muted2); margin-top:6px; line-height:1.5; }
 
   /* File list */
   #file-list { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; max-height:220px; overflow-y:auto; }
@@ -269,7 +287,7 @@
 <nav>
   <a href="/dashboard.html" class="nav-logo">
     <div class="nav-logo-icon">🎙</div>
-    <div class="nav-logo-text">Voice<span>IQ</span></div>
+    <div class="nav-logo-text">AI <span>Transcriber</span></div>
   </a>
   <div class="nav-right">
     <span class="nav-user" id="nav-username">Loading...</span>
@@ -285,21 +303,49 @@
     <!-- Upload -->
     <div class="panel-title">Upload Recordings</div>
 
-    <div class="upload-zone" id="upload-zone"
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="source-file" onclick="setSource('file')">File Upload</button>
+      <button class="mode-btn" id="source-url" onclick="setSource('url')">Paste URL</button>
+    </div>
+
+    <div class="source-panel show" id="file-source-panel">
+      <div class="upload-zone" id="upload-zone"
       ondragover="handleDragOver(event)"
       ondragleave="handleDragLeave(event)"
       ondrop="handleDrop(event)">
-      <input type="file" id="file-input" multiple accept=".mp3,.wav,.m4a,.flac,.ogg"
-        onchange="handleFiles(this.files)">
-      <div class="upload-icon">🎵</div>
-      <h3>Drop audio files here</h3>
-      <p>MP3, WAV, M4A, FLAC · Single or bulk</p>
+        <input type="file" id="file-input" multiple accept=".mp3,.wav,.m4a,.flac,.ogg"
+          onchange="handleFiles(this.files)">
+        <div class="upload-icon">🎵</div>
+        <h3>Drop audio files here</h3>
+        <p>MP3, WAV, M4A, FLAC · Single or bulk</p>
+      </div>
+    </div>
+
+    <div class="source-panel" id="url-source-panel">
+      <div id="single-url-panel">
+        <div class="form-field">
+          <label>Recording URL</label>
+          <input class="url-single-input" type="url" id="single-url-input"
+            placeholder="https://example.com/recording.mp3"
+            oninput="handleSingleUrlInput(this.value)">
+          <div class="source-hint">The backend downloads the recording first, then runs the normal transcription pipeline.</div>
+        </div>
+      </div>
+      <div id="bulk-url-panel" style="display:none">
+        <div class="form-field">
+          <label>Recording URLs</label>
+          <textarea class="url-box" id="bulk-url-input"
+            placeholder="https://example.com/call-001.mp3&#10;https://example.com/call-002.wav"
+            oninput="handleBulkUrlInput(this.value)"></textarea>
+          <div class="source-hint">Paste one recording URL per line. Per-line Publisher ID and Caller ID fields appear below.</div>
+        </div>
+      </div>
     </div>
 
     <!-- Mode toggle -->
     <div class="mode-toggle">
-      <button class="mode-btn active" id="mode-single" onclick="setMode('single')">Single File</button>
-      <button class="mode-btn" id="mode-bulk" onclick="setMode('bulk')">Bulk Upload</button>
+      <button class="mode-btn active" id="mode-single" onclick="setMode('single')">Single</button>
+      <button class="mode-btn" id="mode-bulk" onclick="setMode('bulk')">Bulk</button>
     </div>
 
     <!-- File list (bulk mode) -->
@@ -388,8 +434,10 @@ let token = localStorage.getItem('voiceiq_token');
 if (!token) window.location.href = '/index.html';
 
 let uploadMode = 'single';
+let inputSource = 'file';
 let selectedFiles = [];
 let fileMetadata = {}; // filename -> {publisher_id, caller_id}
+let urlEntries = [];
 let currentPage = 0;
 const PAGE_SIZE = 20;
 let totalCalls = 0;
@@ -417,11 +465,26 @@ function logout() {
 
 // ── UPLOAD ────────────────────────────────────────────────────────────────
 
+function setSource(source) {
+  inputSource = source;
+  document.getElementById('source-file').classList.toggle('active', source==='file');
+  document.getElementById('source-url').classList.toggle('active', source==='url');
+  document.getElementById('file-source-panel').classList.toggle('show', source==='file');
+  document.getElementById('url-source-panel').classList.toggle('show', source==='url');
+  document.getElementById('single-url-panel').style.display = source==='url' && uploadMode==='single' ? 'block' : 'none';
+  document.getElementById('bulk-url-panel').style.display = source==='url' && uploadMode==='bulk' ? 'block' : 'none';
+  renderFileList();
+  updateUploadButton();
+}
+
 function setMode(mode) {
   uploadMode = mode;
   document.getElementById('mode-single').classList.toggle('active', mode==='single');
   document.getElementById('mode-bulk').classList.toggle('active', mode==='bulk');
+  document.getElementById('single-url-panel').style.display = inputSource==='url' && mode==='single' ? 'block' : 'none';
+  document.getElementById('bulk-url-panel').style.display = inputSource==='url' && mode==='bulk' ? 'block' : 'none';
   renderFileList();
+  updateUploadButton();
 }
 
 function handleDragOver(e) {
@@ -437,6 +500,7 @@ function handleDrop(e) {
   handleFiles(e.dataTransfer.files);
 }
 function handleFiles(fileList) {
+  if (inputSource !== 'file') return;
   const allowed = ['.mp3','.wav','.m4a','.flac','.ogg'];
   const newFiles = Array.from(fileList).filter(f =>
     allowed.some(ext => f.name.toLowerCase().endsWith(ext))
@@ -451,11 +515,47 @@ function handleFiles(fileList) {
     newFiles.forEach(f => { if (!existing.has(f.name)) selectedFiles.push(f); });
   }
   renderFileList();
-  document.getElementById('upload-btn').disabled = selectedFiles.length === 0;
-  document.getElementById('upload-btn-text').textContent =
-    selectedFiles.length > 1
-      ? `Start Transcription (${selectedFiles.length} files)`
-      : 'Start Transcription';
+  updateUploadButton();
+}
+
+function handleSingleUrlInput(value) {
+  const trimmed = value.trim();
+  const prev = urlEntries[0] || {};
+  urlEntries = trimmed ? [{
+    url: trimmed,
+    publisher_id: prev.publisher_id || null,
+    caller_id: prev.caller_id || null,
+  }] : [];
+  renderFileList();
+  updateUploadButton();
+}
+
+function handleBulkUrlInput(value) {
+  const existingMeta = {};
+  urlEntries.forEach(entry => {
+    existingMeta[entry.url] = {
+      publisher_id: entry.publisher_id || null,
+      caller_id: entry.caller_id || null,
+    };
+  });
+
+  const seen = new Set();
+  urlEntries = value
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => {
+      if (!line || seen.has(line)) return false;
+      seen.add(line);
+      return true;
+    })
+    .map(url => ({
+      url,
+      publisher_id: existingMeta[url]?.publisher_id || null,
+      caller_id: existingMeta[url]?.caller_id || null,
+    }));
+
+  renderFileList();
+  updateUploadButton();
 }
 
 function validateAlphanumeric(input) {
@@ -472,6 +572,48 @@ function formatDuration(bytes) {
 function renderFileList() {
   const list = document.getElementById('file-list');
   const sharedFields = document.getElementById('shared-fields');
+
+  if (inputSource === 'url') {
+    if (uploadMode === 'single') {
+      sharedFields.classList.add('show');
+      if (!urlEntries.length) {
+        list.innerHTML = '';
+        return;
+      }
+
+      const entry = urlEntries[0];
+      list.innerHTML = `
+        <div class="file-item">
+          <div class="file-item-top">
+            <span class="file-icon">🔗</span>
+            <span class="file-name" title="${entry.url}">${entry.url}</span>
+            <button class="file-remove" onclick="clearSingleUrl()">✕</button>
+          </div>
+        </div>`;
+      return;
+    }
+
+    sharedFields.classList.remove('show');
+    list.innerHTML = urlEntries.map((entry, i) => `
+      <div class="file-item">
+        <div class="file-item-top">
+          <span class="file-icon">🔗</span>
+          <span class="file-name" title="${entry.url}">${entry.url}</span>
+          <button class="file-remove" onclick="removeUrlEntry(${i})">✕</button>
+        </div>
+        <div class="file-inputs">
+          <input type="text" placeholder="Publisher ID (opt)"
+            value="${entry.publisher_id||''}"
+            maxlength="64"
+            oninput="validateAlphanumeric(this); updateUrlMeta(${i},'publisher_id',this.value)">
+          <input type="text" placeholder="Caller ID (opt)"
+            value="${entry.caller_id||''}"
+            maxlength="64"
+            oninput="validateAlphanumeric(this); updateUrlMeta(${i},'caller_id',this.value)">
+        </div>
+      </div>`).join('');
+    return;
+  }
 
   if (uploadMode === 'single' || selectedFiles.length <= 1) {
     list.innerHTML = '';
@@ -520,10 +662,7 @@ function renderFileList() {
 function removeFile(idx) {
   selectedFiles.splice(idx, 1);
   renderFileList();
-  if (!selectedFiles.length) {
-    document.getElementById('upload-btn').disabled = true;
-    document.getElementById('upload-btn-text').textContent = 'Start Transcription';
-  }
+  updateUploadButton();
 }
 
 function updateFileMeta(idx, key, val) {
@@ -533,28 +672,70 @@ function updateFileMeta(idx, key, val) {
   fileMetadata[fname][key] = val.trim() || null;
 }
 
+function updateUrlMeta(idx, key, val) {
+  if (!urlEntries[idx]) return;
+  urlEntries[idx][key] = val.trim() || null;
+}
+
+function clearSingleUrl() {
+  urlEntries = [];
+  document.getElementById('single-url-input').value = '';
+  renderFileList();
+  updateUploadButton();
+}
+
+function removeUrlEntry(idx) {
+  urlEntries.splice(idx, 1);
+  const bulkInput = document.getElementById('bulk-url-input');
+  bulkInput.value = urlEntries.map(entry => entry.url).join('\n');
+  renderFileList();
+  updateUploadButton();
+}
+
+function updateUploadButton() {
+  const count = inputSource === 'file' ? selectedFiles.length : urlEntries.length;
+  const btn = document.getElementById('upload-btn');
+  const text = document.getElementById('upload-btn-text');
+  btn.disabled = count === 0;
+  if (count <= 1) {
+    text.textContent = inputSource === 'file' ? 'Start Transcription' : 'Download & Transcribe';
+    return;
+  }
+  const noun = inputSource === 'file' ? 'files' : 'URLs';
+  text.textContent = `${inputSource === 'file' ? 'Start Transcription' : 'Download & Transcribe'} (${count} ${noun})`;
+}
+
 async function doUpload() {
-  if (!selectedFiles.length) return;
+  if ((inputSource === 'file' && !selectedFiles.length) || (inputSource === 'url' && !urlEntries.length)) return;
   const btn = document.getElementById('upload-btn');
   btn.disabled = true;
-  document.getElementById('upload-btn-text').textContent = 'Uploading...';
+  document.getElementById('upload-btn-text').textContent = inputSource === 'file' ? 'Uploading...' : 'Downloading...';
 
   try {
-    if (selectedFiles.length === 1) {
+    if (inputSource === 'file' && selectedFiles.length === 1) {
       await uploadSingle(selectedFiles[0]);
-    } else {
+    } else if (inputSource === 'file') {
       await uploadBulk(selectedFiles);
+    } else if (urlEntries.length === 1) {
+      await uploadSingleUrl(urlEntries[0]);
+    } else {
+      await uploadBulkUrls(urlEntries);
     }
     selectedFiles = [];
     fileMetadata = {};
+    urlEntries = [];
+    document.getElementById('file-input').value = '';
+    document.getElementById('single-url-input').value = '';
+    document.getElementById('bulk-url-input').value = '';
     renderFileList();
     loadCalls();
-    showToast('Upload successful! Processing started.', 'success');
+    showToast(`${inputSource === 'file' ? 'Upload' : 'Download'} successful. Processing started.`, 'success');
   } catch(e) {
-    showToast(`Upload failed: ${e.message}`, 'error');
+    const verb = inputSource === 'file' ? 'Upload' : 'Download';
+    showToast(`${verb} failed: ${e.message}`, 'error');
   } finally {
     btn.disabled = false;
-    document.getElementById('upload-btn-text').textContent = 'Start Transcription';
+    updateUploadButton();
   }
 }
 
@@ -594,6 +775,46 @@ async function uploadBulk(files) {
   if (!res.ok) {
     const d = await res.json();
     throw new Error(d.detail || 'Bulk upload failed');
+  }
+  const items = await res.json();
+  items.forEach(item => startSSE(item.job_id, item.call_id));
+}
+
+async function uploadSingleUrl(entry) {
+  const pub = document.getElementById('shared-publisher').value.trim();
+  const cal = document.getElementById('shared-caller').value.trim();
+  const res = await fetch(`${API}/api/upload/url`, {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: entry.url,
+      publisher_id: pub || null,
+      caller_id: cal || null,
+    }),
+  });
+  if (!res.ok) {
+    const d = await res.json();
+    throw new Error(d.detail || 'URL download failed');
+  }
+  const data = await res.json();
+  startSSE(data.job_id, data.call_id);
+}
+
+async function uploadBulkUrls(entries) {
+  const res = await fetch(`${API}/api/upload/url/bulk`, {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      items: entries.map(entry => ({
+        url: entry.url,
+        publisher_id: entry.publisher_id || null,
+        caller_id: entry.caller_id || null,
+      })),
+    }),
+  });
+  if (!res.ok) {
+    const d = await res.json();
+    throw new Error(d.detail || 'Bulk URL download failed');
   }
   const items = await res.json();
   items.forEach(item => startSSE(item.job_id, item.call_id));

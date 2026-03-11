@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
     yield
     worker_task.cancel()
 
-app = FastAPI(title="VoiceIQ API", lifespan=lifespan)
+app = FastAPI(title="AI Transcriber API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
