@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoiceIQ — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #07090F;
+    --surface:   #0D1117;
+    --card:      #0F1420;
+    --card2:     #161B27;
+    --border:    #1E2535;
+    --border2:   #2A3347;
+    --agent:     #4F8EF7;
+    --agent-dim: rgba(79,142,247,0.12);
+    --caller:    #F5A623;
+    --caller-dim:rgba(245,166,35,0.12);
+    --green:     #22C55E;
+    --green-dim: rgba(34,197,94,0.12);
+    --red:       #EF4444;
+    --red-dim:   rgba(239,68,68,0.12);
+    --yellow:    #EAB308;
+    --text:      #E8ECF4;
+    --muted:     #6B7A99;
+    --muted2:    #3D4A61;
+    --radius:    10px;
+  }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; min-height: 100vh; }
+
+  /* ── NAVBAR ── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(7,9,15,0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px; height: 56px;
+  }
+  .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .nav-logo-icon { width: 30px; height: 30px; background: linear-gradient(135deg,var(--agent),#2563EB); border-radius: 7px; display:flex;align-items:center;justify-content:center; font-size:15px; }
+  .nav-logo-text { font-family:'Syne',sans-serif; font-weight:800; font-size:18px; color:var(--text); }
+  .nav-logo-text span { color: var(--agent); }
+  .nav-right { display:flex; align-items:center; gap:16px; }
+  .nav-user { font-size:12px; color:var(--muted); }
+  .btn-ghost { background:none; border:1px solid var(--border); border-radius:7px; padding:6px 14px; color:var(--muted); font-family:inherit; font-size:12px; cursor:pointer; transition:all 0.2s; }
+  .btn-ghost:hover { border-color:var(--border2); color:var(--text); }
+
+  /* ── LAYOUT ── */
+  .layout { display:grid; grid-template-columns: 320px 1fr; gap:0; min-height: calc(100vh - 56px); }
+
+  /* ── LEFT PANEL ── */
+  .left-panel {
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px 20px;
+    overflow-y: auto;
+    height: calc(100vh - 56px);
+    position: sticky; top: 56px;
+  }
+
+  .panel-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: var(--card);
+    margin-bottom: 20px;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--agent);
+    background: var(--agent-dim);
+  }
+  .upload-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+  .upload-icon { font-size: 32px; margin-bottom: 10px; }
+  .upload-zone h3 { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; margin-bottom:5px; }
+  .upload-zone p { font-size:11px; color:var(--muted); }
+
+  /* Mode toggle */
+  .mode-toggle { display:flex; gap:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:3px; margin-bottom:18px; }
+  .mode-btn { flex:1; padding:7px 10px; background:none; border:none; color:var(--muted); font-family:inherit; font-size:11px; cursor:pointer; border-radius:6px; transition:all 0.2s; }
+  .mode-btn.active { background:var(--card2); color:var(--text); }
+
+  /* File list */
+  #file-list { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; max-height:220px; overflow-y:auto; }
+  .file-item {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .file-item-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .file-icon { font-size:14px; flex-shrink:0; }
+  .file-name { font-size:11px; color:var(--text); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .file-dur { font-size:10px; color:var(--muted); flex-shrink:0; }
+  .file-remove { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:14px; padding:0 2px; }
+  .file-remove:hover { color:var(--red); }
+  .file-inputs { display:flex; gap:6px; }
+  .file-inputs input {
+    flex:1; background:var(--bg); border:1px solid var(--border); border-radius:6px;
+    padding:5px 8px; color:var(--text); font-family:inherit; font-size:10px; outline:none;
+  }
+  .file-inputs input:focus { border-color:var(--agent); }
+  .file-inputs input::placeholder { color:var(--muted2); }
+
+  /* Shared fields */
+  .shared-fields { display:none; margin-bottom:18px; }
+  .shared-fields.show { display:block; }
+  .form-row { display:flex; gap:8px; margin-bottom:10px; }
+  .form-field { flex:1; }
+  .form-field label { display:block; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
+  .form-field input {
+    width:100%; background:var(--card); border:1px solid var(--border); border-radius:7px;
+    padding:9px 11px; color:var(--text); font-family:inherit; font-size:12px; outline:none;
+    transition: border-color 0.2s;
+  }
+  .form-field input:focus { border-color:var(--agent); }
+  .form-field input::placeholder { color:var(--muted2); }
+  .field-hint { font-size:10px; color:var(--muted2); margin-top:3px; }
+
+  .btn-primary {
+    width:100%; padding:11px; background:linear-gradient(135deg,var(--agent),#2563EB);
+    border:none; border-radius:8px; color:#fff; font-family:'Syne',sans-serif;
+    font-weight:700; font-size:13px; cursor:pointer; transition:opacity 0.2s;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn-primary:hover { opacity:0.9; }
+  .btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
+
+  .divider { height:1px; background:var(--border); margin:24px 0; }
+
+  /* Stats mini */
+  .stats-row { display:flex; gap:8px; margin-bottom:20px; }
+  .stat-pill {
+    flex:1; background:var(--card2); border:1px solid var(--border); border-radius:8px;
+    padding:10px 10px; text-align:center;
+  }
+  .stat-pill .val { font-family:'Syne',sans-serif; font-weight:700; font-size:18px; }
+  .stat-pill .lbl { font-size:10px; color:var(--muted); margin-top:2px; }
+  .stat-pill.blue .val { color:var(--agent); }
+  .stat-pill.amber .val { color:var(--caller); }
+  .stat-pill.green .val { color:var(--green); }
+
+  /* Filters */
+  .filter-group { margin-bottom:14px; }
+  .filter-group label { display:block; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
+  .filter-group input, .filter-group select {
+    width:100%; background:var(--card); border:1px solid var(--border); border-radius:7px;
+    padding:7px 10px; color:var(--text); font-family:inherit; font-size:12px; outline:none;
+  }
+  .filter-group select option { background:var(--card2); }
+
+  /* ── RIGHT PANEL ── */
+  .right-panel { padding: 24px 28px; overflow-y: auto; }
+  .right-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .right-header h1 { font-family:'Syne',sans-serif; font-weight:700; font-size:22px; }
+  .right-header p { font-size:12px; color:var(--muted); margin-top:3px; }
+
+  /* Job cards */
+  .calls-grid { display:flex; flex-direction:column; gap:10px; }
+  .call-card {
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+    padding:16px 18px; cursor:pointer; transition:all 0.2s;
+    text-decoration:none; color:inherit; display:block;
+  }
+  .call-card:hover { border-color:var(--border2); background:var(--card2); transform:translateY(-1px); }
+  .call-card-top { display:flex; align-items:flex-start; gap:12px; }
+  .call-card-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
+  .call-card-info { flex:1; min-width:0; }
+  .call-card-name { font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px; }
+  .call-card-meta { display:flex; gap:12px; flex-wrap:wrap; }
+  .meta-chip {
+    font-size:10px; color:var(--muted);
+    display:flex; align-items:center; gap:4px;
+  }
+  .meta-chip.pub { color:var(--agent); }
+  .meta-chip.cal { color:var(--caller); }
+  .call-card-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+
+  /* Status badges */
+  .badge {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 10px; border-radius:20px;
+    font-size:10px; font-weight:500; letter-spacing:0.04em;
+  }
+  .badge-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+  .badge.done    { background:var(--green-dim); color:var(--green); }
+  .badge.done .badge-dot { background:var(--green); }
+  .badge.processing { background:var(--agent-dim); color:var(--agent); }
+  .badge.processing .badge-dot { background:var(--agent); animation:pulse 1.2s infinite; }
+  .badge.pending { background:rgba(234,179,8,0.12); color:var(--yellow); }
+  .badge.pending .badge-dot { background:var(--yellow); }
+  .badge.error   { background:var(--red-dim); color:var(--red); }
+  .badge.error .badge-dot { background:var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Progress bar */
+  .progress-wrap { margin-top:10px; }
+  .progress-bar-bg { background:var(--border); border-radius:3px; height:3px; overflow:hidden; }
+  .progress-bar-fill {
+    height:100%; border-radius:3px;
+    background:linear-gradient(90deg,var(--agent),#60A5FA);
+    transition: width 0.5s ease;
+  }
+  .progress-msg { font-size:10px; color:var(--muted); margin-top:4px; }
+
+  /* Streaming segments preview */
+  .stream-preview {
+    margin-top:12px; border-top:1px solid var(--border);
+    padding-top:10px; display:none;
+  }
+  .stream-preview.show { display:block; }
+  .stream-line { font-size:11px; line-height:1.5; padding:2px 0; }
+  .stream-line.agent { color:var(--agent); }
+  .stream-line.caller { color:var(--caller); }
+  .stream-line .role-tag { font-weight:500; margin-right:6px; }
+
+  /* Empty state */
+  .empty-state {
+    text-align:center; padding:80px 40px;
+    color:var(--muted);
+  }
+  .empty-state .empty-icon { font-size:48px; margin-bottom:16px; opacity:0.4; }
+  .empty-state h3 { font-family:'Syne',sans-serif; font-size:16px; color:var(--text); margin-bottom:8px; }
+  .empty-state p { font-size:13px; }
+
+  /* Pagination */
+  .pagination { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:24px; }
+  .page-btn { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:6px 12px; color:var(--muted); font-family:inherit; font-size:12px; cursor:pointer; transition:all 0.2s; }
+  .page-btn:hover:not(:disabled) { border-color:var(--agent); color:var(--agent); }
+  .page-btn:disabled { opacity:0.3; cursor:default; }
+  .page-info { font-size:12px; color:var(--muted); }
+
+  /* toast */
+  .toast {
+    position:fixed; bottom:24px; right:24px; z-index:9999;
+    background:var(--card2); border:1px solid var(--border2);
+    border-radius:10px; padding:12px 18px;
+    font-size:13px; display:none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    animation: slideIn 0.3s ease;
+  }
+  .toast.show { display:block; }
+  .toast.success { border-left:3px solid var(--green); }
+  .toast.error   { border-left:3px solid var(--red); }
+  @keyframes slideIn { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/dashboard.html" class="nav-logo">
+    <div class="nav-logo-icon">🎙</div>
+    <div class="nav-logo-text">Voice<span>IQ</span></div>
+  </a>
+  <div class="nav-right">
+    <span class="nav-user" id="nav-username">Loading...</span>
+    <button class="btn-ghost" onclick="logout()">Sign Out</button>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- ── LEFT PANEL ── -->
+  <div class="left-panel">
+
+    <!-- Upload -->
+    <div class="panel-title">Upload Recordings</div>
+
+    <div class="upload-zone" id="upload-zone"
+      ondragover="handleDragOver(event)"
+      ondragleave="handleDragLeave(event)"
+      ondrop="handleDrop(event)">
+      <input type="file" id="file-input" multiple accept=".mp3,.wav,.m4a,.flac,.ogg"
+        onchange="handleFiles(this.files)">
+      <div class="upload-icon">🎵</div>
+      <h3>Drop audio files here</h3>
+      <p>MP3, WAV, M4A, FLAC · Single or bulk</p>
+    </div>
+
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-single" onclick="setMode('single')">Single File</button>
+      <button class="mode-btn" id="mode-bulk" onclick="setMode('bulk')">Bulk Upload</button>
+    </div>
+
+    <!-- File list (bulk mode) -->
+    <div id="file-list"></div>
+
+    <!-- Shared metadata (single or bulk-shared) -->
+    <div class="shared-fields show" id="shared-fields">
+      <div class="form-row">
+        <div class="form-field">
+          <label>Publisher ID <span style="color:var(--muted2)">(optional)</span></label>
+          <input type="text" id="shared-publisher" placeholder="e.g. PUB001" maxlength="64"
+            oninput="validateAlphanumeric(this)">
+          <div class="field-hint">Alphanumeric only</div>
+        </div>
+        <div class="form-field">
+          <label>Caller ID <span style="color:var(--muted2)">(optional)</span></label>
+          <input type="text" id="shared-caller" placeholder="e.g. CAL123" maxlength="64"
+            oninput="validateAlphanumeric(this)">
+          <div class="field-hint">Alphanumeric only</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="upload-btn" onclick="doUpload()" disabled>
+      <span>▶</span> <span id="upload-btn-text">Start Transcription</span>
+    </button>
+
+    <div class="divider"></div>
+
+    <!-- Stats -->
+    <div class="panel-title">Overview</div>
+    <div class="stats-row">
+      <div class="stat-pill green"><div class="val" id="stat-done">0</div><div class="lbl">Done</div></div>
+      <div class="stat-pill blue"><div class="val" id="stat-active">0</div><div class="lbl">Active</div></div>
+      <div class="stat-pill amber"><div class="val" id="stat-total">0</div><div class="lbl">Total</div></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="panel-title">Filter Calls</div>
+    <div class="filter-group">
+      <label>Search</label>
+      <input type="text" id="filter-search" placeholder="filename, publisher..." oninput="applyFilters()">
+    </div>
+    <div class="filter-group">
+      <label>Status</label>
+      <select id="filter-status" onchange="applyFilters()">
+        <option value="">All statuses</option>
+        <option value="done">Done</option>
+        <option value="processing">Processing</option>
+        <option value="pending">Pending</option>
+        <option value="error">Error</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Publisher ID</label>
+      <input type="text" id="filter-publisher" placeholder="Filter by publisher..." oninput="applyFilters()">
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div class="right-panel">
+    <div class="right-header">
+      <div>
+        <h1>Call Transcriptions</h1>
+        <p id="calls-count">Loading...</p>
+      </div>
+    </div>
+    <div class="calls-grid" id="calls-grid">
+      <div class="empty-state">
+        <div class="empty-icon">🎙</div>
+        <h3>No recordings yet</h3>
+        <p>Upload audio files to get started</p>
+      </div>
+    </div>
+    <div class="pagination" id="pagination" style="display:none"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = window.API_BASE || '';
+let token = localStorage.getItem('voiceiq_token');
+if (!token) window.location.href = '/index.html';
+
+let uploadMode = 'single';
+let selectedFiles = [];
+let fileMetadata = {}; // filename -> {publisher_id, caller_id}
+let currentPage = 0;
+const PAGE_SIZE = 20;
+let totalCalls = 0;
+let filterTimeout = null;
+let activeSSE = {}; // job_id -> EventSource
+
+const headers = () => ({ 'Authorization': `Bearer ${token}` });
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+
+async function init() {
+  try {
+    const res = await fetch(`${API}/api/auth/me`, { headers: headers() });
+    if (!res.ok) { logout(); return; }
+    const user = await res.json();
+    document.getElementById('nav-username').textContent = user.username;
+  } catch(e) { logout(); }
+  loadCalls();
+}
+
+function logout() {
+  localStorage.removeItem('voiceiq_token');
+  window.location.href = '/index.html';
+}
+
+// ── UPLOAD ────────────────────────────────────────────────────────────────
+
+function setMode(mode) {
+  uploadMode = mode;
+  document.getElementById('mode-single').classList.toggle('active', mode==='single');
+  document.getElementById('mode-bulk').classList.toggle('active', mode==='bulk');
+  renderFileList();
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.add('dragover');
+}
+function handleDragLeave(e) {
+  document.getElementById('upload-zone').classList.remove('dragover');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+}
+function handleFiles(fileList) {
+  const allowed = ['.mp3','.wav','.m4a','.flac','.ogg'];
+  const newFiles = Array.from(fileList).filter(f =>
+    allowed.some(ext => f.name.toLowerCase().endsWith(ext))
+  );
+  if (!newFiles.length) { showToast('No supported audio files found', 'error'); return; }
+
+  if (uploadMode === 'single') {
+    selectedFiles = [newFiles[0]];
+  } else {
+    // Deduplicate
+    const existing = new Set(selectedFiles.map(f=>f.name));
+    newFiles.forEach(f => { if (!existing.has(f.name)) selectedFiles.push(f); });
+  }
+  renderFileList();
+  document.getElementById('upload-btn').disabled = selectedFiles.length === 0;
+  document.getElementById('upload-btn-text').textContent =
+    selectedFiles.length > 1
+      ? `Start Transcription (${selectedFiles.length} files)`
+      : 'Start Transcription';
+}
+
+function validateAlphanumeric(input) {
+  input.value = input.value.replace(/[^a-zA-Z0-9\-_]/g, '');
+}
+
+function formatDuration(bytes) {
+  // Estimate from file size (32kbps = 4KB/s)
+  const secs = Math.round(bytes / 4000);
+  const m = Math.floor(secs/60), s = secs%60;
+  return `~${m}:${String(s).padStart(2,'0')}`;
+}
+
+function renderFileList() {
+  const list = document.getElementById('file-list');
+  const sharedFields = document.getElementById('shared-fields');
+
+  if (uploadMode === 'single' || selectedFiles.length <= 1) {
+    list.innerHTML = '';
+    sharedFields.classList.add('show');
+    if (selectedFiles.length === 1) {
+      const f = selectedFiles[0];
+      list.innerHTML = `
+        <div class="file-item">
+          <div class="file-item-top">
+            <span class="file-icon">🎵</span>
+            <span class="file-name">${f.name}</span>
+            <span class="file-dur">${formatDuration(f.size)}</span>
+            <button class="file-remove" onclick="removeFile(0)">✕</button>
+          </div>
+        </div>`;
+    }
+    return;
+  }
+
+  // Bulk mode with per-file metadata
+  sharedFields.classList.remove('show');
+  list.innerHTML = selectedFiles.map((f, i) => {
+    const meta = fileMetadata[f.name] || {};
+    return `
+    <div class="file-item">
+      <div class="file-item-top">
+        <span class="file-icon">🎵</span>
+        <span class="file-name">${f.name}</span>
+        <span class="file-dur">${formatDuration(f.size)}</span>
+        <button class="file-remove" onclick="removeFile(${i})">✕</button>
+      </div>
+      <div class="file-inputs">
+        <input type="text" placeholder="Publisher ID (opt)"
+          value="${meta.publisher_id||''}"
+          maxlength="64"
+          oninput="validateAlphanumeric(this); updateFileMeta(${i},'publisher_id',this.value)">
+        <input type="text" placeholder="Caller ID (opt)"
+          value="${meta.caller_id||''}"
+          maxlength="64"
+          oninput="validateAlphanumeric(this); updateFileMeta(${i},'caller_id',this.value)">
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function removeFile(idx) {
+  selectedFiles.splice(idx, 1);
+  renderFileList();
+  if (!selectedFiles.length) {
+    document.getElementById('upload-btn').disabled = true;
+    document.getElementById('upload-btn-text').textContent = 'Start Transcription';
+  }
+}
+
+function updateFileMeta(idx, key, val) {
+  const fname = selectedFiles[idx]?.name;
+  if (!fname) return;
+  if (!fileMetadata[fname]) fileMetadata[fname] = {};
+  fileMetadata[fname][key] = val.trim() || null;
+}
+
+async function doUpload() {
+  if (!selectedFiles.length) return;
+  const btn = document.getElementById('upload-btn');
+  btn.disabled = true;
+  document.getElementById('upload-btn-text').textContent = 'Uploading...';
+
+  try {
+    if (selectedFiles.length === 1) {
+      await uploadSingle(selectedFiles[0]);
+    } else {
+      await uploadBulk(selectedFiles);
+    }
+    selectedFiles = [];
+    fileMetadata = {};
+    renderFileList();
+    loadCalls();
+    showToast('Upload successful! Processing started.', 'success');
+  } catch(e) {
+    showToast(`Upload failed: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    document.getElementById('upload-btn-text').textContent = 'Start Transcription';
+  }
+}
+
+async function uploadSingle(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const pub = document.getElementById('shared-publisher').value.trim();
+  const cal = document.getElementById('shared-caller').value.trim();
+  if (pub) fd.append('publisher_id', pub);
+  if (cal) fd.append('caller_id', cal);
+
+  const res = await fetch(`${API}/api/upload/single`, {
+    method: 'POST', headers: headers(), body: fd
+  });
+  if (!res.ok) {
+    const d = await res.json();
+    throw new Error(d.detail || 'Upload failed');
+  }
+  const data = await res.json();
+  startSSE(data.job_id, data.call_id);
+}
+
+async function uploadBulk(files) {
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f));
+
+  const metaArr = files.map(f => ({
+    filename: f.name,
+    publisher_id: fileMetadata[f.name]?.publisher_id || null,
+    caller_id:    fileMetadata[f.name]?.caller_id    || null,
+  }));
+  fd.append('metadata_json', JSON.stringify(metaArr));
+
+  const res = await fetch(`${API}/api/upload/bulk`, {
+    method: 'POST', headers: headers(), body: fd
+  });
+  if (!res.ok) {
+    const d = await res.json();
+    throw new Error(d.detail || 'Bulk upload failed');
+  }
+  const items = await res.json();
+  items.forEach(item => startSSE(item.job_id, item.call_id));
+}
+
+// ── SSE STREAMING ─────────────────────────────────────────────────────────
+
+function startSSE(jobId, callId) {
+  if (activeSSE[jobId]) return;
+  const url = `${API}/api/jobs/${jobId}/stream?token=${token}`;
+  const es = new EventSource(url);
+  activeSSE[jobId] = es;
+
+  es.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.done) { es.close(); delete activeSSE[jobId]; loadCalls(); return; }
+    updateJobCard(jobId, callId, data);
+    if (data.status === 'done' || data.status === 'error') {
+      es.close(); delete activeSSE[jobId]; loadCalls();
+    }
+  };
+  es.onerror = () => { es.close(); delete activeSSE[jobId]; };
+}
+
+function updateJobCard(jobId, callId, data) {
+  const card = document.getElementById(`card-${callId}`);
+  if (!card) { loadCalls(); return; }
+
+  const progressFill = card.querySelector('.progress-bar-fill');
+  const progressMsg  = card.querySelector('.progress-msg');
+  const badge        = card.querySelector('.badge');
+  const preview      = card.querySelector('.stream-preview');
+
+  if (progressFill) progressFill.style.width = data.progress + '%';
+  if (progressMsg)  progressMsg.textContent  = data.message;
+  if (badge) {
+    badge.className = `badge ${data.status}`;
+    badge.innerHTML = `<div class="badge-dot"></div>${data.status}`;
+  }
+
+  if (data.new_segments?.length && preview) {
+    preview.classList.add('show');
+    data.new_segments.forEach(seg => {
+      const line = document.createElement('div');
+      line.className = `stream-line ${seg.role}`;
+      const label = seg.role === 'agent' ? '🔵 Agent' : '🟡 Caller';
+      line.innerHTML = `<span class="role-tag">${label}:</span>${seg.text}`;
+      preview.appendChild(line);
+    });
+    preview.scrollTop = preview.scrollHeight;
+  }
+}
+
+// ── CALLS LIST ────────────────────────────────────────────────────────────
+
+let filterState = { search:'', status:'', publisher:'' };
+
+function applyFilters() {
+  clearTimeout(filterTimeout);
+  filterTimeout = setTimeout(() => {
+    filterState.search    = document.getElementById('filter-search').value.trim();
+    filterState.status    = document.getElementById('filter-status').value;
+    filterState.publisher = document.getElementById('filter-publisher').value.trim();
+    currentPage = 0;
+    loadCalls();
+  }, 300);
+}
+
+async function loadCalls() {
+  const params = new URLSearchParams({
+    limit: PAGE_SIZE,
+    offset: currentPage * PAGE_SIZE,
+  });
+  if (filterState.search)    params.set('search', filterState.search);
+  if (filterState.status)    params.set('status', filterState.status);
+  if (filterState.publisher) params.set('publisher_id', filterState.publisher);
+
+  try {
+    const res = await fetch(`${API}/api/calls?${params}`, { headers: headers() });
+    if (!res.ok) return;
+    const data = await res.json();
+    totalCalls = data.total;
+    renderCalls(data.items, data.total);
+    updateStats(data.items);
+  } catch(e) { console.error(e); }
+}
+
+function formatTime(sec) {
+  if (!sec) return '--:--';
+  const m = Math.floor(sec/60), s = Math.floor(sec%60);
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function timeAgo(dt) {
+  const diff = (Date.now() - new Date(dt+'Z').getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
+function renderCalls(calls, total) {
+  const grid = document.getElementById('calls-grid');
+  document.getElementById('calls-count').textContent =
+    `${total} recording${total!==1?'s':''} total`;
+
+  if (!calls.length) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <h3>No recordings found</h3>
+        <p>Try adjusting your filters or upload a new recording</p>
+      </div>`;
+    document.getElementById('pagination').style.display = 'none';
+    return;
+  }
+
+  grid.innerHTML = calls.map(c => {
+    const isDone       = c.status === 'done';
+    const isProcessing = ['processing','splitting','transcribing_agent','transcribing_caller','merging','detecting_roles'].includes(c.status);
+    const isPending    = c.status === 'pending';
+    const isError      = c.status === 'error';
+
+    return `
+    <${isDone ? `a href="/call.html?id=${c.id}"` : 'div'} 
+      class="call-card" id="card-${c.id}">
+      <div class="call-card-top">
+        <div class="call-card-icon">
+          ${isDone?'✅': isProcessing?'⚡': isPending?'⏳':'❌'}
+        </div>
+        <div class="call-card-info">
+          <div class="call-card-name" title="${c.filename}">${c.filename}</div>
+          <div class="call-card-meta">
+            ${c.publisher_id ? `<span class="meta-chip pub">📋 ${c.publisher_id}</span>` : ''}
+            ${c.caller_id    ? `<span class="meta-chip cal">📞 ${c.caller_id}</span>`    : ''}
+            <span class="meta-chip">⏱ ${formatTime(c.duration_sec)}</span>
+            <span class="meta-chip">${c.segment_count} turns</span>
+            <span class="meta-chip">${timeAgo(c.created_at)}</span>
+          </div>
+        </div>
+        <div class="call-card-right">
+          <span class="badge ${c.status}">
+            <div class="badge-dot"></div>${c.status}
+          </span>
+        </div>
+      </div>
+      ${(isProcessing || isPending) ? `
+        <div class="progress-wrap">
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" style="width:${isProcessing?'40':5}%"></div>
+          </div>
+          <div class="progress-msg">Waiting to process...</div>
+        </div>
+        <div class="stream-preview" style="max-height:80px;overflow:hidden"></div>
+      ` : ''}
+    </${isDone ? 'a' : 'div'}>`;
+  }).join('');
+
+  // Pagination
+  renderPagination(total);
+
+  // Resume SSE for active jobs
+  calls.forEach(c => {
+    if (['processing','pending','splitting','transcribing_agent',
+         'transcribing_caller','merging','detecting_roles'].includes(c.status)) {
+      // Re-fetch job to get job_id
+      fetch(`${API}/api/calls/${c.id}`, { headers: headers() })
+        .then(r => r.json())
+        .then(d => {
+          // Get job id from jobs endpoint
+          fetch(`${API}/api/jobs?limit=100`, { headers: headers() })
+            .then(r => r.json())
+            .then(jobs => {
+              const job = jobs.find(j => j.call_id === c.id);
+              if (job && !activeSSE[job.id]) startSSE(job.id, c.id);
+            });
+        });
+    }
+  });
+}
+
+function updateStats(calls) {
+  const done   = calls.filter(c=>c.status==='done').length;
+  const active = calls.filter(c=>['processing','pending'].includes(c.status)).length;
+  document.getElementById('stat-done').textContent   = done;
+  document.getElementById('stat-active').textContent = active;
+  document.getElementById('stat-total').textContent  = totalCalls;
+}
+
+function renderPagination(total) {
+  const pag = document.getElementById('pagination');
+  const pages = Math.ceil(total / PAGE_SIZE);
+  if (pages <= 1) { pag.style.display='none'; return; }
+  pag.style.display = 'flex';
+  pag.innerHTML = `
+    <button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===0?'disabled':''}>← Prev</button>
+    <span class="page-info">Page ${currentPage+1} of ${pages}</span>
+    <button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=pages-1?'disabled':''}>Next →</button>
+  `;
+}
+
+function goPage(p) {
+  currentPage = p;
+  loadCalls();
+  document.querySelector('.right-panel').scrollTop = 0;
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// Auto-refresh every 8s for active jobs
+setInterval(() => {
+  if (Object.keys(activeSSE).length > 0) return;
+  loadCalls();
+}, 8000);
+
+init();
+</script>
+</body>
+</html>

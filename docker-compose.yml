@@ -1,0 +1,39 @@
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voiceiq-backend
+    restart: unless-stopped
+    environment:
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - SECRET_KEY=${SECRET_KEY:-voiceiq-change-this-in-production}
+      - DATABASE_URL=sqlite+aiosqlite:///./data/voiceiq.db
+    volumes:
+      - ./storage:/app/storage    # uploaded audio files
+      - ./data:/app/data          # SQLite database
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: voiceiq-frontend
+    restart: unless-stopped
+    environment:
+      - API_BASE=http://backend:8000
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+networks:
+  default:
+    name: voiceiq-network
