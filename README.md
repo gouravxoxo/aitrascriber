@@ -39,6 +39,7 @@ git clone <repo> voiceiq && cd voiceiq
 # Create .env file
 cp .env.example .env
 # Edit .env and set your MISTRAL_API_KEY
+# Optional: add MISTRAL_API_KEYS=key1,key2,key3 for failover/rotation
 
 # Start everything
 docker-compose up -d
@@ -112,7 +113,8 @@ voiceiq/
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `MISTRAL_API_KEY` | Your Mistral API key | required |
+| `MISTRAL_API_KEY` | Primary Mistral API key | required if `MISTRAL_API_KEYS` is not set |
+| `MISTRAL_API_KEYS` | Comma-separated Mistral API keys for rotation/failover | optional |
 | `SECRET_KEY` | JWT signing secret | change in production |
 | `DATABASE_URL` | SQLAlchemy DB URL | SQLite (./data/voiceiq.db) |
 

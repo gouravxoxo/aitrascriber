@@ -10,6 +10,7 @@ from services.audio_processor import split_stereo_channels
 from services.transcriber import transcribe_channel
 from services.role_detector import detect_agent_channel
 from services.merger import merge_channels
+from services.error_parser import classify_error
 
 # Global asyncio queue — holds {job_id, call_id} dicts
 job_queue: asyncio.Queue = asyncio.Queue()
@@ -109,8 +110,12 @@ async def process_job(job_id: str, call_id: str):
         except Exception as e:
             err = traceback.format_exc()
             print(f"[worker] ERROR job={job_id}: {err}")
-            await update_job(job_id, "error", 0, f"Error: {str(e)[:200]}")
-            await update_call_status(call_id, "error", error_msg=str(e)[:500])
+            error_info = classify_error(str(e))
+            job_msg = error_info["error_summary"]
+            if error_info["error_status"]:
+                job_msg += f" (HTTP {error_info['error_status']})"
+            await update_job(job_id, "error", 0, job_msg)
+            await update_call_status(call_id, "error", error_msg=error_info["error_detail"][:4000])
 
 
 async def start_worker():

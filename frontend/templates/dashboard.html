@@ -847,6 +847,7 @@ function updateJobCard(jobId, callId, data) {
   const progressMsg  = card.querySelector('.progress-msg');
   const badge        = card.querySelector('.badge');
   const preview      = card.querySelector('.stream-preview');
+  const errorBox     = card.querySelector('.error-summary');
 
   if (progressFill) progressFill.style.width = data.progress + '%';
   if (progressMsg)  progressMsg.textContent  = data.message;
@@ -865,6 +866,12 @@ function updateJobCard(jobId, callId, data) {
       preview.appendChild(line);
     });
     preview.scrollTop = preview.scrollHeight;
+  }
+
+  if (data.error && errorBox) {
+    const statusText = data.error.error_status ? ` (HTTP ${data.error.error_status})` : '';
+    errorBox.textContent = `${data.error.error_summary || 'Processing failed.'}${statusText}`;
+    errorBox.style.display = 'block';
   }
 }
 
@@ -937,9 +944,13 @@ function renderCalls(calls, total) {
     const isProcessing = ['processing','splitting','transcribing_agent','transcribing_caller','merging','detecting_roles'].includes(c.status);
     const isPending    = c.status === 'pending';
     const isError      = c.status === 'error';
+    const isOpenable   = isDone || isError;
+    const errorText    = c.error_summary
+      ? `${c.error_summary}${c.error_status ? ` (HTTP ${c.error_status})` : ''}`
+      : 'Processing failed';
 
     return `
-    <${isDone ? `a href="/call.html?id=${c.id}"` : 'div'} 
+    <${isOpenable ? `a href="/call.html?id=${c.id}"` : 'div'} 
       class="call-card" id="card-${c.id}">
       <div class="call-card-top">
         <div class="call-card-icon">
@@ -970,7 +981,12 @@ function renderCalls(calls, total) {
         </div>
         <div class="stream-preview" style="max-height:80px;overflow:hidden"></div>
       ` : ''}
-    </${isDone ? 'a' : 'div'}>`;
+      ${isError ? `
+        <div class="progress-wrap" style="margin-top:12px">
+          <div class="progress-msg error-summary" style="color:var(--red);display:block">${errorText}</div>
+        </div>
+      ` : ''}
+    </${isOpenable ? 'a' : 'div'}>`;
   }).join('');
 
   // Pagination

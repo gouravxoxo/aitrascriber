@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from database import get_db, Call, Segment, User
 from routers.auth import get_current_user
+from services.error_parser import classify_error
 
 router = APIRouter()
 
@@ -34,6 +35,10 @@ class CallSummary(BaseModel):
     status: str
     segment_count: int
     created_at: datetime
+    error_code: Optional[str] = None
+    error_status: Optional[int] = None
+    error_stage: Optional[str] = None
+    error_summary: Optional[str] = None
 
 class CallDetail(BaseModel):
     id: str
@@ -45,6 +50,11 @@ class CallDetail(BaseModel):
     status: str
     agent_channel: Optional[int]
     error_msg: Optional[str]
+    error_code: Optional[str]
+    error_status: Optional[int]
+    error_stage: Optional[str]
+    error_summary: Optional[str]
+    error_detail: Optional[str]
     created_at: datetime
     segments: List[SegmentOut]
     # stats
@@ -137,6 +147,7 @@ async def list_calls(
     # Segment counts
     items = []
     for call in calls:
+        error_info = classify_error(call.error_msg) if call.status == "error" else {}
         seg_res = await db.execute(
             select(func.count(Segment.id)).where(Segment.call_id == call.id)
         )
@@ -146,7 +157,11 @@ async def list_calls(
             publisher_id=call.publisher_id, caller_id=call.caller_id,
             call_date=call.call_date, duration_sec=call.duration_sec,
             status=call.status, segment_count=seg_count,
-            created_at=call.created_at
+            created_at=call.created_at,
+            error_code=error_info.get("error_code"),
+            error_status=error_info.get("error_status"),
+            error_stage=error_info.get("error_stage"),
+            error_summary=error_info.get("error_summary"),
         ))
 
     return CallsPage(items=items, total=total, limit=limit, offset=offset)
@@ -168,6 +183,7 @@ async def get_call(
         raise HTTPException(404, "Call not found")
 
     segs = sorted(call.segments, key=lambda s: s.seq or 0)
+    error_info = classify_error(call.error_msg) if call.status == "error" else {}
     agent_words  = sum(s.word_count or 0 for s in segs if s.role == "agent")
     caller_words = sum(s.word_count or 0 for s in segs if s.role == "caller")
 
@@ -176,7 +192,13 @@ async def get_call(
         publisher_id=call.publisher_id, caller_id=call.caller_id,
         call_date=call.call_date, duration_sec=call.duration_sec,
         status=call.status, agent_channel=call.agent_channel,
-        error_msg=call.error_msg, created_at=call.created_at,
+        error_msg=call.error_msg,
+        error_code=error_info.get("error_code"),
+        error_status=error_info.get("error_status"),
+        error_stage=error_info.get("error_stage"),
+        error_summary=error_info.get("error_summary"),
+        error_detail=error_info.get("error_detail"),
+        created_at=call.created_at,
         segments=[SegmentOut(
             id=s.id, role=s.role, start_sec=s.start_sec,
             end_sec=s.end_sec, text=s.text, seq=s.seq or 0

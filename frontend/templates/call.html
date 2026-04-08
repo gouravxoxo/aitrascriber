@@ -469,6 +469,9 @@ function formatDate(dt) {
 
 function renderCallInfo() {
   const c = callData;
+  const statusLine = c.status === 'error' && c.error_summary
+    ? `${c.status}${c.error_status ? ` (HTTP ${c.error_status})` : ''}`
+    : c.status;
   document.getElementById('call-info').innerHTML = `
     <div class="info-row">
       <span class="info-label">Duration</span>
@@ -495,8 +498,13 @@ function renderCallInfo() {
     </div>
     <div class="info-row">
       <span class="info-label">Status</span>
-      <span class="info-value" style="color:var(--green)">${c.status}</span>
+      <span class="info-value" style="color:${c.status === 'error' ? 'var(--red)' : 'var(--green)'}">${statusLine}</span>
     </div>
+    ${c.error_stage ? `
+    <div class="info-row">
+      <span class="info-label">Failed Stage</span>
+      <span class="info-value">${c.error_stage}</span>
+    </div>` : ''}
   `;
 }
 
@@ -524,11 +532,24 @@ function renderTranscript(highlight = '') {
     (() => { const d=document.createElement('div'); d.className='transcript-inner'; document.getElementById('transcript-wrap').appendChild(d); return d; })();
 
   if (!segs.length) {
+    if (callData.status === 'error') {
+      inner.innerHTML = `
+        <div class="error-banner" style="max-width:760px;text-align:left;color:var(--text)">
+          <div style="color:var(--red);font-weight:700;margin-bottom:10px">Processing failed</div>
+          <div style="margin-bottom:8px">${callData.error_summary || 'Unknown error'}</div>
+          ${callData.error_status ? `<div style="margin-bottom:8px;color:var(--muted)">HTTP status: ${callData.error_status}</div>` : ''}
+          ${callData.error_stage ? `<div style="margin-bottom:8px;color:var(--muted)">Stage: ${callData.error_stage}</div>` : ''}
+          ${callData.error_code ? `<div style="margin-bottom:12px;color:var(--muted)">Code: ${callData.error_code}</div>` : ''}
+          <details style="margin-top:8px">
+            <summary style="cursor:pointer;color:var(--text)">Technical details</summary>
+            <pre style="white-space:pre-wrap;word-break:break-word;margin-top:12px;color:var(--text2);font-family:inherit;font-size:12px">${escapeHtml(callData.error_detail || callData.error_msg || 'No error detail available')}</pre>
+          </details>
+        </div>`;
+      return;
+    }
     inner.innerHTML = `
       <div class="error-banner">
-        ${callData.status === 'error'
-          ? `❌ Processing failed: ${callData.error_msg || 'Unknown error'}`
-          : '⏳ Transcription in progress...'}
+        ⏳ Transcription in progress...
       </div>`;
     return;
   }
@@ -588,6 +609,14 @@ function highlightActiveSegment(currentTime) {
 // ── SEARCH ────────────────────────────────────────────────────────────────
 
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function doSearch(q) {
   const trimmed = q.trim();

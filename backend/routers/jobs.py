@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from database import get_db, Job, Call, Segment, User
 from routers.auth import get_current_user
+from services.error_parser import classify_error
 
 router = APIRouter()
 
@@ -35,6 +36,11 @@ class JobOut(BaseModel):
     created_at: datetime
     finished_at: Optional[datetime]
     filename: Optional[str]
+    error_code: Optional[str] = None
+    error_status: Optional[int] = None
+    error_stage: Optional[str] = None
+    error_summary: Optional[str] = None
+    error_detail: Optional[str] = None
     segments: List[SegmentOut] = []
 
 
@@ -59,6 +65,7 @@ async def list_jobs(
 
     out = []
     for job in jobs:
+        error_info = classify_error(job.call.error_msg) if job.status == "error" and job.call else {}
         out.append(JobOut(
             id=job.id,
             call_id=job.call_id,
@@ -68,6 +75,11 @@ async def list_jobs(
             created_at=job.created_at,
             finished_at=job.finished_at,
             filename=job.call.filename if job.call else None,
+            error_code=error_info.get("error_code"),
+            error_status=error_info.get("error_status"),
+            error_stage=error_info.get("error_stage"),
+            error_summary=error_info.get("error_summary"),
+            error_detail=error_info.get("error_detail"),
             segments=[],
         ))
     return out
@@ -90,6 +102,7 @@ async def get_job(
         raise HTTPException(404, "Job not found")
 
     segments = []
+    error_info = classify_error(job.call.error_msg) if job.status == "error" and job.call else {}
     if job.call and job.call.segments:
         for seg in sorted(job.call.segments, key=lambda s: s.seq or 0):
             segments.append(SegmentOut(
@@ -102,6 +115,11 @@ async def get_job(
         progress=job.progress, step_msg=job.step_msg,
         created_at=job.created_at, finished_at=job.finished_at,
         filename=job.call.filename if job.call else None,
+        error_code=error_info.get("error_code"),
+        error_status=error_info.get("error_status"),
+        error_stage=error_info.get("error_stage"),
+        error_summary=error_info.get("error_summary"),
+        error_detail=error_info.get("error_detail"),
         segments=segments,
     )
 
@@ -154,6 +172,7 @@ async def stream_job(
                     "progress":     job.progress,
                     "message":      job.step_msg,
                     "new_segments": new_segments,
+                    "error": classify_error(job.call.error_msg) if job.status == "error" and job.call else None,
                 })
                 yield f"data: {payload}\n\n"
 

@@ -5,8 +5,13 @@ from typing import Any
 import httpx
 from mistralai import Mistral
 
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 MODEL = os.getenv("MISTRAL_TRANSCRIBE_MODEL", "voxtral-mini-latest")
+
+from services.mistral_pool import (
+    get_rotated_mistral_api_keys,
+    is_retryable_mistral_error,
+    key_label,
+)
 
 
 def _to_dict(value: Any) -> dict:
@@ -17,8 +22,8 @@ def _to_dict(value: Any) -> dict:
     return {}
 
 
-def _transcribe_sync(wav_path: str) -> list[dict]:
-    client = Mistral(api_key=MISTRAL_API_KEY)
+def _transcribe_sync(wav_path: str, api_key: str) -> list[dict]:
+    client = Mistral(api_key=api_key)
 
     if hasattr(client, "audio") and hasattr(client.audio, "transcriptions"):
         with open(wav_path, "rb") as audio_file:
@@ -35,7 +40,7 @@ def _transcribe_sync(wav_path: str) -> list[dict]:
         with open(wav_path, "rb") as audio_file:
             response = httpx.post(
                 "https://api.mistral.ai/v1/audio/transcriptions",
-                headers={"Authorization": f"Bearer {MISTRAL_API_KEY}"},
+                headers={"Authorization": f"Bearer {api_key}"},
                 data={
                     "model": MODEL,
                     "timestamp_granularities[]": "segment",
@@ -72,13 +77,26 @@ def _transcribe_sync(wav_path: str) -> list[dict]:
 
 
 async def transcribe_channel(wav_path: str) -> list[dict]:
-    if not MISTRAL_API_KEY:
+    api_keys = get_rotated_mistral_api_keys()
+    if not api_keys:
         raise RuntimeError("MISTRAL_API_KEY is missing")
 
-    try:
-        segments = await asyncio.to_thread(_transcribe_sync, wav_path)
-    except Exception as exc:
-        raise RuntimeError(f"Transcription request failed: {exc}") from exc
+    errors: list[str] = []
+    for index, api_key in enumerate(api_keys, start=1):
+        try:
+            segments = await asyncio.to_thread(_transcribe_sync, wav_path, api_key)
+            print(
+                f"[transcriber] {len(segments)} segments from {os.path.basename(wav_path)} "
+                f"using key {index}/{len(api_keys)} ({key_label(api_key)})"
+            )
+            return segments
+        except Exception as exc:
+            msg = str(exc)
+            errors.append(
+                f"key {index}/{len(api_keys)} ({key_label(api_key)}): {msg}"
+            )
+            if not is_retryable_mistral_error(msg):
+                break
 
-    print(f"[transcriber] {len(segments)} segments from {os.path.basename(wav_path)}")
-    return segments
+    detail = " | ".join(errors[:6])
+    raise RuntimeError(f"Transcription request failed after {len(errors)} key attempt(s): {detail}")

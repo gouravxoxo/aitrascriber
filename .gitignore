@@ -1,0 +1,7 @@
+.env
+data/
+storage/audio/
+storage/channels/
+*.pyc
+*.pyo
+*.pyd
