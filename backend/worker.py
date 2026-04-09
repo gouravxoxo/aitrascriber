@@ -1,4 +1,5 @@
 import asyncio
+import os
 import traceback
 from datetime import datetime
 
@@ -16,7 +17,7 @@ from services.error_parser import classify_error
 job_queue: asyncio.Queue = asyncio.Queue()
 
 # Max concurrent jobs (controls Voxtral API rate)
-MAX_CONCURRENT = 3
+MAX_CONCURRENT = max(1, int(os.getenv("MAX_CONCURRENT_TRANSCRIPTION_JOBS", "1")))
 semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
 
@@ -82,15 +83,9 @@ async def process_job(job_id: str, call_id: str):
             # ── 3. Transcribe both channels in parallel ───────────────
             await update_job(job_id, "transcribing_agent", 25, "Transcribing channel 0...")
 
-            # Run both transcriptions concurrently
-            ch0_task = asyncio.create_task(transcribe_channel(ch0_path))
-            ch1_task = asyncio.create_task(transcribe_channel(ch1_path))
-
-            # Update progress mid-way
-            await asyncio.sleep(2)
-            await update_job(job_id, "transcribing_caller", 50, "Transcribing both channels...")
-
-            ch0_segments, ch1_segments = await asyncio.gather(ch0_task, ch1_task)
+            ch0_segments = await transcribe_channel(ch0_path)
+            await update_job(job_id, "transcribing_caller", 50, "Transcribing channel 1...")
+            ch1_segments = await transcribe_channel(ch1_path)
 
             await update_job(job_id, "detecting_roles", 75, "Identifying agent and caller...")
 

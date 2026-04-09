@@ -4,7 +4,7 @@ import json
 from mistralai import Mistral
 
 from services.mistral_pool import (
-    get_rotated_mistral_api_keys,
+    get_failover_mistral_api_keys,
     is_retryable_mistral_error,
     key_label,
 )
@@ -71,9 +71,9 @@ async def detect_agent_channel(
     Falls back to channel with more speaking time if AI fails.
     """
     try:
-        api_keys = get_rotated_mistral_api_keys()
+        api_keys = get_failover_mistral_api_keys()
         if not api_keys:
-            raise RuntimeError("MISTRAL_API_KEY is missing")
+            raise RuntimeError("MISTRAL_API_KEY or MISTRAL_API_KEYS is missing")
 
         errors: list[str] = []
         for index, api_key in enumerate(api_keys, start=1):
